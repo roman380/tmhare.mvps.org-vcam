@@ -1,6 +1,6 @@
 # DirectShow VCam
 
-This repository contains [Vivek](https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/c/1beZkSCb0KE/m/5VF366wR3CcJ)'s Capture Source Filter filter, a popular DirectShow sample project.
+This repository contains [Vivek](https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/c/1beZkSCb0KE/m/5VF366wR3CcJ)'s Capture Source Filter filter, a popular DirectShow sample project, which recently celebrated its 16th anniversary ([2005 posting reference](https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/c/WRuNmZsWj-o/m/-l4sKR_2o-EJ)).
 
 > Capture Source Filter filter (version 0.1) 86 KB zipped, includes binaries.  A sample source filter that emulates a video capture device contributed by Vivek (rep movsd from the public newsgroups).  Thanks Vivek!  TMH has not tested this filter yet.  Ask questions about this on microsoft.public.win32.programmer.directx.video.
 
@@ -42,6 +42,6 @@ Build a pipeline and run:
 
 The VCam project has been discussed a lot in various forums. Most of them are archived and there are no active disussions, however there is still a lot of information online. Just a few pointers:
 
-- https://social.msdn.microsoft.com/Forums/en-US/home?category=&forum=&filter=&sort=relevancedesc&brandIgnore=true&searchTerm=VCam
-- https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/search?q=VCam
-- https://stackoverflow.com/search?q=VCam
+- [https://social.msdn.microsoft.com/Forums](https://social.msdn.microsoft.com/Forums/en-US/home?category=&forum=&filter=&sort=relevancedesc&brandIgnore=true&searchTerm=VCam)
+- [https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/...](https://groups.google.com/g/microsoft.public.win32.programmer.directx.video/search?q=VCam)
+- [https://stackoverflow.com/...](https://stackoverflow.com/search?q=VCam)
