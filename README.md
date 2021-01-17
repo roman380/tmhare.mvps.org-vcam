@@ -23,12 +23,12 @@ The head of the repository is updated for Virtual Studio 2019 Community builds.
 
 Differences from original version:
 
-- output file name is Filter.dll
+- output file name is Filters.dll (unlike original VCam.ax)
 - the project is extended to have `x64` platform configuration
 
 ## How to use
 
-Use Widows 10 SDK GraphEdit or [GraphStudioNext](https://github.com/cplussharp/graph-studio-next)
+Use Widows 10 SDK GraphEdit or [GraphStudioNext](https://github.com/cplussharp/graph-studio-next).
 
 Locate "Virtual Cam" filter:
 
