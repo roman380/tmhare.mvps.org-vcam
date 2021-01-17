@@ -9,3 +9,31 @@ This was hosted on [The March Hare's](https://web.archive.org/web/20060813155608
 See also:
 
 * [How to build and run Vivek's Virtual Camera on Windows 10?](https://stackoverflow.com/a/65698434/868014)
+* [Errors in building Vivek's Virtual Camera on Windows 10?](https://stackoverflow.com/a/65758769/868014)
+
+## Updates
+
+Orignial source code is tagged by [original](https://github.com/roman380/tmhare.mvps.org-vcam/releases/tag/original) tag. In this state the project needs a bit of massaging to be beuilt.
+
+The head of the repository is updated for Virtual Studio 2019 Community builds.
+
+1. The project requires DirectShow BaseClasses, which is a part of Windows SDK moved to github. For this reason you need to pull https://github.com/roman380/Windows-classic-samples/tree/directshow/Samples/Win7Samples/multimedia/directshow (note branch "directshow") first and build the directshow.sln solution there (or at least BaseClasses project) first.
+2. Then, edit [directshow.props](directshow.props) and modify line with `WindowsClassicSamplesDir` to have it point to root of repository from step 1 above
+3. Then, open [vcam.sln](vcam.sln) and build this project
+
+Differences from original version:
+
+- output file name is Filter.dll
+- the project is extended to have `x64` platform configuration
+
+## How to use
+
+Use Widows 10 SDK GraphEdit or [GraphStudioNext](https://github.com/cplussharp/graph-studio-next)
+
+Locate "Virtual Cam" filter:
+
+![](README-01.png)
+
+Build a pipeline and run:
+
+![](README-02.png)
