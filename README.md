@@ -38,6 +38,10 @@ Build a pipeline and run:
 
 ![](README-02.png)
 
+## Licensing
+
+See [discussion in issue #4](https://github.com/roman380/tmhare.mvps.org-vcam/issues/4) on applicable license.
+
 ## Further information
 
 The VCam project has been discussed a lot in various forums. Most of them are archived and there are no active disussions, however there is still a lot of information online. Just a few pointers:
