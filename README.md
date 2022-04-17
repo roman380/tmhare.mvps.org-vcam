@@ -38,6 +38,10 @@ Build a pipeline and run:
 
 ![](README-02.png)
 
+See also:
+
+- [How to use the project to expose own video to external applications?](https://github.com/roman380/tmhare.mvps.org-vcam/issues/5) - discussions and links
+
 ## Licensing
 
 See [discussion in issue #4](https://github.com/roman380/tmhare.mvps.org-vcam/issues/4) on applicable license.
