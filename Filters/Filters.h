@@ -4,6 +4,15 @@
 
 EXTERN_C const GUID CLSID_VirtualCam;
 
+#include "shared-memory-queue.h"
+#include "Placeholder.h"
+#include <memory>
+#include <string>
+#include <vector>
+
+static const std::string name = "ShareTheBoard Virtual Camera";
+static const auto wname = std::wstring(name.begin(), name.end());
+
 class CVCamStream;
 class CVCam : public CSource
 {
@@ -63,6 +72,7 @@ public:
     HRESULT GetMediaType(int iPosition, CMediaType *pmt);
     HRESULT SetMediaType(const CMediaType *pmt);
     HRESULT OnThreadCreate(void);
+    HRESULT OnThreadDestroy(void);
     
 private:
     CVCam *m_pParent;
@@ -70,7 +80,14 @@ private:
     HBITMAP m_hLogoBmp;
     CCritSec m_cSharedState;
     IReferenceClock *m_pClock;
+    video_queue_t* vq = nullptr;
 
+    enum queue_state prev_state = SHARED_QUEUE_STATE_INVALID;
+    uint32_t cx = 1920;
+    uint32_t cy = 1080;
+    uint64_t interval = 333333ULL;
+    std::vector<uint8_t> prev_frame;
+    Placeholder placeholder;
 };
 
 

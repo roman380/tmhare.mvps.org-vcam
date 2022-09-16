@@ -22,6 +22,8 @@ STDAPI AMovieSetupUnregisterServer( CLSID clsServer );
 DEFINE_GUID(CLSID_VirtualCam,
             0x8e14549a, 0xdb61, 0x4309, 0xaf, 0xa1, 0x35, 0x78, 0xe9, 0x27, 0xe9, 0x33);
 
+HINSTANCE dll_inst = nullptr;
+
 const AMOVIESETUP_MEDIATYPE AMSMediaTypesVCam = 
 { 
     &MEDIATYPE_Video, 
@@ -44,7 +46,7 @@ const AMOVIESETUP_PIN AMSPinVCam=
 const AMOVIESETUP_FILTER AMSFilterVCam =
 {
     &CLSID_VirtualCam,  // Filter CLSID
-    L"Virtual Cam",     // String name
+    wname.c_str(),     // String name
     MERIT_DO_NOT_USE,      // Filter merit
     1,                     // Number pins
     &AMSPinVCam             // Pin details
@@ -53,7 +55,7 @@ const AMOVIESETUP_FILTER AMSFilterVCam =
 CFactoryTemplate g_Templates[] = 
 {
     {
-        L"Virtual Cam",
+        wname.c_str(),
         &CLSID_VirtualCam,
         CVCam::CreateInstance,
         NULL,
@@ -80,7 +82,7 @@ STDAPI RegisterFilters( BOOL bRegister )
     hr = CoInitialize(0);
     if(bRegister)
     {
-        hr = AMovieSetupRegisterServer(CLSID_VirtualCam, L"Virtual Cam", achFileName, L"Both", L"InprocServer32");
+        hr = AMovieSetupRegisterServer(CLSID_VirtualCam, wname.c_str(), achFileName, L"Both", L"InprocServer32");
     }
 
     if( SUCCEEDED(hr) )
@@ -97,7 +99,7 @@ STDAPI RegisterFilters( BOOL bRegister )
                 rf2.dwMerit = MERIT_DO_NOT_USE;
                 rf2.cPins = 1;
                 rf2.rgPins = &AMSPinVCam;
-                hr = fm->RegisterFilter(CLSID_VirtualCam, L"Virtual Cam", &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
+                hr = fm->RegisterFilter(CLSID_VirtualCam, wname.c_str(), &pMoniker, &CLSID_VideoInputDeviceCategory, NULL, &rf2);
             }
             else
             {
@@ -131,7 +133,11 @@ STDAPI DllUnregisterServer()
 
 extern "C" BOOL WINAPI DllEntryPoint(HINSTANCE, ULONG, LPVOID);
 
-BOOL APIENTRY DllMain(HANDLE hModule, DWORD  dwReason, LPVOID lpReserved)
+BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD  dwReason, LPVOID lpReserved)
 {
-	return DllEntryPoint((HINSTANCE)(hModule), dwReason, lpReserved);
+    if (dwReason == DLL_PROCESS_ATTACH)
+    {
+        dll_inst = hModule;
+    }
+	return DllEntryPoint(hModule, dwReason, lpReserved);
 }

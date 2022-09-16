@@ -2,7 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" >
-    <WindowsClassicSamplesDir>C:\Project\github.com\Windows-classic-samples</WindowsClassicSamplesDir>
+    <WindowsClassicSamplesDir>C:\Repos\stb\Windows-classic-samples</WindowsClassicSamplesDir>
     <DirectShowSamplesDir>$(WindowsClassicSamplesDir)\Samples\Win7Samples\multimedia\directshow</DirectShowSamplesDir>
   </PropertyGroup>
   <PropertyGroup />

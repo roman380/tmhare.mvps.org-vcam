@@ -1,11 +1,51 @@
 #pragma warning(disable:4244)
 #pragma warning(disable:4711)
 
+#include "Message.h"
+
 #include <streams.h>
 #include <stdio.h>
 #include <olectl.h>
 #include <dvdmedia.h>
 #include "filters.h"
+#include <uuids.h>
+#include <fstream>
+
+const GUID MEDIASUBTYPE_I420 = {0x30323449,
+                0x0000,
+                0x0010,
+                {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
+                 0x71} };
+
+
+void sendCameraStatus(CameraStatus st)
+{
+
+    MessageCameraStatus status;
+    status.payload = st;
+
+    HANDLE hPipe;
+    DWORD dwWritten;
+
+    hPipe = CreateFile(TEXT("\\\\.\\pipe\\StbVirtualCameraPipeline"),
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL);
+
+    if (hPipe != INVALID_HANDLE_VALUE)
+    {
+        WriteFile(hPipe,
+            (uint8_t*)&status,
+            sizeof(MessageCameraStatus),
+            &dwWritten,
+            NULL);
+
+        CloseHandle(hPipe);
+    }
+}
 
 //////////////////////////////////////////////////////////////////////////
 //  CVCam is the source filter which masquerades as a capture device
@@ -18,13 +58,13 @@ CUnknown * WINAPI CVCam::CreateInstance(LPUNKNOWN lpunk, HRESULT *phr)
 }
 
 CVCam::CVCam(LPUNKNOWN lpunk, HRESULT *phr) : 
-    CSource(NAME("Virtual Cam"), lpunk, CLSID_VirtualCam)
+    CSource(NAME(name.c_str()), lpunk, CLSID_VirtualCam)
 {
     ASSERT(phr);
     CAutoLock cAutoLock(&m_cStateLock);
     // Create the one and only output pin
     m_paStreams = (CSourceStream **) new CVCamStream*[1];
-    m_paStreams[0] = new CVCamStream(phr, this, L"Virtual Cam");
+    m_paStreams[0] = new CVCamStream(phr, this, wname.c_str());
 }
 
 HRESULT CVCam::QueryInterface(REFIID riid, void **ppv)
@@ -41,10 +81,11 @@ HRESULT CVCam::QueryInterface(REFIID riid, void **ppv)
 // all the stuff.
 //////////////////////////////////////////////////////////////////////////
 CVCamStream::CVCamStream(HRESULT *phr, CVCam *pParent, LPCWSTR pPinName) :
-    CSourceStream(NAME("Virtual Cam"),phr, pParent, pPinName), m_pParent(pParent)
+    CSourceStream(NAME(name.c_str()),phr, pParent, pPinName), m_pParent(pParent)
 {
     // Set the default media type as 320x240x24@15
     GetMediaType(4, &m_mt);
+    placeholder.initialize_placeholder();
 }
 
 CVCamStream::~CVCamStream()
@@ -73,12 +114,52 @@ HRESULT CVCamStream::QueryInterface(REFIID riid, void **ppv)
 
 HRESULT CVCamStream::FillBuffer(IMediaSample *pms)
 {
-    REFERENCE_TIME rtNow;
-    
-    REFERENCE_TIME avgFrameTime = ((VIDEOINFOHEADER*)m_mt.pbFormat)->AvgTimePerFrame;
+    nv12_scale_t scale;
+    scale.dst_cx = 1920;
+    scale.dst_cy = 1080;
+    scale.format = TARGET_FORMAT_NV12;
+    scale.src_cx = 1920;
+    scale.src_cy = 1080;
+    uint64_t tmp;
+    if (!vq)
+    {
+        vq = video_queue_open();
+    }
 
-    rtNow = m_rtLastTime;
-    m_rtLastTime += avgFrameTime;
+    uint32_t new_cx = cx;
+    uint32_t new_cy = cy;
+    uint64_t new_interval = interval;
+
+    /* cx, cy and interval are the resolution and frame rate of the
+       virtual camera _source_, ie OBS' output. Do not confuse cx / cy
+       with GetCX() / GetCY() / GetInterval() which return the virtualcam
+       filter output! */
+
+    if (!vq) {
+        vq = video_queue_open();
+    }
+
+    enum queue_state state = video_queue_state(vq);
+    if (state != prev_state) {
+        if (state == SHARED_QUEUE_STATE_READY) {
+            /* The virtualcam output from OBS has started, get
+               the actual cx / cy of the data stream */
+            video_queue_get_info(vq, &new_cx, &new_cy,
+                &new_interval);
+            cx = new_cx;
+            cy = new_cy;
+            interval = new_interval;
+        }
+        else if (state == SHARED_QUEUE_STATE_STOPPING) {
+            video_queue_close(vq);
+            vq = nullptr;
+        }
+
+        prev_state = state;
+    }
+
+    auto rtNow = m_rtLastTime;
+    m_rtLastTime += interval;
     pms->SetTime(&rtNow, &m_rtLastTime);
     pms->SetSyncPoint(TRUE);
 
@@ -86,8 +167,39 @@ HRESULT CVCamStream::FillBuffer(IMediaSample *pms)
     long lDataLen;
     pms->GetPointer(&pData);
     lDataLen = pms->GetSize();
-    for(int i = 0; i < lDataLen; ++i)
-        pData[i] = rand();
+
+    if (state == SHARED_QUEUE_STATE_READY)
+    {
+        if (!video_queue_read(vq, &scale, pData, &tmp))
+        {
+            if (!prev_frame.empty())
+            {
+                memcpy(pData, prev_frame.data(), prev_frame.size());
+            }
+            video_queue_close(vq);
+        }
+        else
+        {
+            if (prev_frame.empty())
+            {
+                prev_frame.reserve(lDataLen);
+            }
+            memcpy(prev_frame.data(), pData, prev_frame.size());
+        }
+    }
+    else
+    {
+        if (placeholder.get_placeholder_ptr())
+        {
+            memcpy(pData, placeholder.get_placeholder_ptr(), lDataLen);
+        }
+        else
+        {
+            for (int i = 0; i < lDataLen; ++i)
+                pData[i] = rand();
+        }
+        video_queue_close(vq);
+    }
 
     return NOERROR;
 } // FillBuffer
@@ -126,12 +238,12 @@ HRESULT CVCamStream::GetMediaType(int iPosition, CMediaType *pmt)
     DECLARE_PTR(VIDEOINFOHEADER, pvi, pmt->AllocFormatBuffer(sizeof(VIDEOINFOHEADER)));
     ZeroMemory(pvi, sizeof(VIDEOINFOHEADER));
 
-    pvi->bmiHeader.biCompression = BI_RGB;
-    pvi->bmiHeader.biBitCount    = 24;
+    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');//MAKEFOURCC('R', 'G', 'B', '4');//MAKEFOURCC('N', 'V', '1', '2');//BI_RGB;
+    pvi->bmiHeader.biBitCount = 12;
     pvi->bmiHeader.biSize       = sizeof(BITMAPINFOHEADER);
-    pvi->bmiHeader.biWidth      = 80 * iPosition;
-    pvi->bmiHeader.biHeight     = 60 * iPosition;
-    pvi->bmiHeader.biPlanes     = 1;
+    pvi->bmiHeader.biWidth = 1920;
+    pvi->bmiHeader.biHeight = 1080;
+    pvi->bmiHeader.biPlanes = 3;
     pvi->bmiHeader.biSizeImage  = GetBitmapSize(&pvi->bmiHeader);
     pvi->bmiHeader.biClrImportant = 0;
 
@@ -185,8 +297,15 @@ HRESULT CVCamStream::DecideBufferSize(IMemAllocator *pAlloc, ALLOCATOR_PROPERTIE
 HRESULT CVCamStream::OnThreadCreate()
 {
     m_rtLastTime = 0;
+    sendCameraStatus(CameraStatus::RUN);
     return NOERROR;
 } // OnThreadCreate
+
+HRESULT CVCamStream::OnThreadDestroy(void)
+{
+    sendCameraStatus(CameraStatus::STOP);
+    return NOERROR;
+}
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -225,25 +344,27 @@ HRESULT STDMETHODCALLTYPE CVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TYPE *
     *pmt = CreateMediaType(&m_mt);
     DECLARE_PTR(VIDEOINFOHEADER, pvi, (*pmt)->pbFormat);
 
-    if (iIndex == 0) iIndex = 4;
-
-    pvi->bmiHeader.biCompression = BI_RGB;
-    pvi->bmiHeader.biBitCount    = 24;
+    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');// MAKEFOURCC('R', 'G', 'B', '4');//MAKEFOURCC('N', 'V', '1', '2');//BI_RGB;
+    pvi->bmiHeader.biBitCount = 12;
     pvi->bmiHeader.biSize       = sizeof(BITMAPINFOHEADER);
-    pvi->bmiHeader.biWidth      = 80 * iIndex;
-    pvi->bmiHeader.biHeight     = 60 * iIndex;
-    pvi->bmiHeader.biPlanes     = 1;
-    pvi->bmiHeader.biSizeImage  = GetBitmapSize(&pvi->bmiHeader);
-    pvi->bmiHeader.biClrImportant = 0;
+    pvi->bmiHeader.biWidth = 1920;
+    pvi->bmiHeader.biHeight = 1080;
+    pvi->bmiHeader.biPlanes = 3;
+    pvi->bmiHeader.biSizeImage = pvi->bmiHeader.biWidth * pvi->bmiHeader.biHeight * 3 / 2;//GetBitmapSize(&pvi->bmiHeader);
+    //pvi->bmiHeader.biClrImportant = 0;
 
     SetRectEmpty(&(pvi->rcSource)); // we want the whole image area rendered.
     SetRectEmpty(&(pvi->rcTarget)); // no particular destination rectangle
 
+    //pvi->rcSource.right = pvi->bmiHeader.biWidth;
+    //pvi->rcSource.bottom = pvi->bmiHeader.biHeight;
+    //pvi->rcTarget = pvi->rcSource;
+
     (*pmt)->majortype = MEDIATYPE_Video;
-    (*pmt)->subtype = MEDIASUBTYPE_RGB24;
+    (*pmt)->subtype = MEDIASUBTYPE_I420;//MEDIASUBTYPE_RGB24;//MEDIASUBTYPE_RGB32;//MEDIASUBTYPE_NV12; //MEDIASUBTYPE_H264;
     (*pmt)->formattype = FORMAT_VideoInfo;
-    (*pmt)->bTemporalCompression = FALSE;
-    (*pmt)->bFixedSizeSamples= FALSE;
+    //(*pmt)->bTemporalCompression = FALSE;
+    (*pmt)->bFixedSizeSamples = true;
     (*pmt)->lSampleSize = pvi->bmiHeader.biSizeImage;
     (*pmt)->cbFormat = sizeof(VIDEOINFOHEADER);
     
@@ -251,31 +372,27 @@ HRESULT STDMETHODCALLTYPE CVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TYPE *
     
     pvscc->guid = FORMAT_VideoInfo;
     pvscc->VideoStandard = AnalogVideo_None;
-    pvscc->InputSize.cx = 640;
-    pvscc->InputSize.cy = 480;
-    pvscc->MinCroppingSize.cx = 80;
-    pvscc->MinCroppingSize.cy = 60;
-    pvscc->MaxCroppingSize.cx = 640;
-    pvscc->MaxCroppingSize.cy = 480;
-    pvscc->CropGranularityX = 80;
-    pvscc->CropGranularityY = 60;
+    pvscc->InputSize.cx = pvi->bmiHeader.biWidth;
+    pvscc->InputSize.cy = pvi->bmiHeader.biHeight;
+    pvscc->MinCroppingSize = pvscc->InputSize;
+    pvscc->MaxCroppingSize = pvscc->InputSize;
+    pvscc->CropGranularityX = 1;//pvscc->InputSize.cx;
+    pvscc->CropGranularityY = 1;//pvscc->InputSize.cy;
     pvscc->CropAlignX = 0;
     pvscc->CropAlignY = 0;
 
-    pvscc->MinOutputSize.cx = 80;
-    pvscc->MinOutputSize.cy = 60;
-    pvscc->MaxOutputSize.cx = 640;
-    pvscc->MaxOutputSize.cy = 480;
-    pvscc->OutputGranularityX = 0;
-    pvscc->OutputGranularityY = 0;
+    pvscc->MinOutputSize = pvscc->InputSize;
+    pvscc->MaxOutputSize = pvscc->InputSize;
+    pvscc->OutputGranularityX = 1;
+    pvscc->OutputGranularityY = 1;
     pvscc->StretchTapsX = 0;
     pvscc->StretchTapsY = 0;
     pvscc->ShrinkTapsX = 0;
     pvscc->ShrinkTapsY = 0;
     pvscc->MinFrameInterval = 200000;   //50 fps
     pvscc->MaxFrameInterval = 50000000; // 0.2 fps
-    pvscc->MinBitsPerSecond = (80 * 60 * 3 * 8) / 5;
-    pvscc->MaxBitsPerSecond = 640 * 480 * 3 * 8 * 50;
+    pvscc->MinBitsPerSecond = (1920 * 1080 * 3 * 8) / 5;
+    pvscc->MaxBitsPerSecond = (1920 * 1080 * 3 * 8) * 5;
 
     return S_OK;
 }
