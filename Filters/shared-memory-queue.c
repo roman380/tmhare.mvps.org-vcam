@@ -153,7 +153,6 @@ void video_queue_close(video_queue_t* vq)
 	UnmapViewOfFile(vq->header);
 	CloseHandle(vq->handle);
 	free(vq);
-	vq = NULL;
 }
 
 void video_queue_get_info(video_queue_t* vq, uint32_t* cx, uint32_t* cy,
