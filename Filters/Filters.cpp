@@ -3,6 +3,7 @@
 
 #include "Message.h"
 
+#include <chrono>
 #include <streams.h>
 #include <stdio.h>
 #include <olectl.h>
@@ -10,6 +11,8 @@
 #include "filters.h"
 #include <uuids.h>
 #include <fstream>
+#include <csignal>
+#include <random>
 
 const GUID MEDIASUBTYPE_I420 = { 0x30323449,
                 0x0000,
@@ -18,12 +21,9 @@ const GUID MEDIASUBTYPE_I420 = { 0x30323449,
                  0x71} };
 
 
-void sendCameraStatus(CameraStatus st)
+template<typename M>
+void sendMessage(M nessage)
 {
-
-    MessageCameraStatus status;
-    status.payload = st;
-
     HANDLE hPipe;
     DWORD dwWritten;
 
@@ -38,14 +38,22 @@ void sendCameraStatus(CameraStatus st)
     if (hPipe != INVALID_HANDLE_VALUE)
     {
         WriteFile(hPipe,
-            (uint8_t*)&status,
-            sizeof(MessageCameraStatus),
+            (uint8_t*)&nessage,
+            sizeof(M),
             &dwWritten,
             NULL);
 
         CloseHandle(hPipe);
     }
 }
+
+void sendCameraStatus(CameraStatus st, uint32_t id)
+{
+    MessageCameraStatus status(id);
+    status.payload = st;
+    sendMessage<MessageCameraStatus>(status);
+}
+#define NAME(_x_) ((LPTSTR) NULL)
 
 //////////////////////////////////////////////////////////////////////////
 //  CVCam is the source filter which masquerades as a capture device
@@ -86,10 +94,26 @@ CVCamStream::CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName) :
     // Set the default media type as 320x240x24@15
     GetMediaType(4, &m_mt);
     placeholder.initialize_placeholder();
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    auto dist = std::uniform_int_distribution<>();
+    id = dist(mt);
+    keep_alive_thread = std::make_unique<std::thread>([&]()
+        {
+            while (is_keep_alive)
+            {
+                sendMessage(MessageKeepAlive(id));
+                std::unique_lock<std::mutex> lk(m);
+                cv.wait_for(lk, std::chrono::milliseconds(5000), [&] { return !is_keep_alive; });
+            }
+        });
 }
 
 CVCamStream::~CVCamStream()
 {
+    is_keep_alive = false;
+    cv.notify_all();
+    keep_alive_thread->join();
 }
 
 HRESULT CVCamStream::QueryInterface(REFIID riid, void** ppv)
@@ -296,16 +320,15 @@ HRESULT CVCamStream::DecideBufferSize(IMemAllocator* pAlloc, ALLOCATOR_PROPERTIE
 HRESULT CVCamStream::OnThreadCreate()
 {
     m_rtLastTime = 0;
-    sendCameraStatus(CameraStatus::RUN);
+    sendCameraStatus(CameraStatus::RUN, id);
     return NOERROR;
 } // OnThreadCreate
 
 HRESULT CVCamStream::OnThreadDestroy(void)
 {
-    sendCameraStatus(CameraStatus::STOP);
+    sendCameraStatus(CameraStatus::STOP, id);
     return NOERROR;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 //  IAMStreamConfig
