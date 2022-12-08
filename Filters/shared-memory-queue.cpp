@@ -1,6 +1,6 @@
 #include <windows.h>
-#include "shared-memory-queue.h"
-//#include "tiny-nv12-scale.h"
+#include "shared-memory-queue.hpp"
+#include "Constants.hpp"
 
 #define VIDEO_NAME L"STBVirtualCamVideo"
 
@@ -41,18 +41,15 @@ struct video_queue {
 void nv12_do_scale(nv12_scale_t* s, uint8_t* dst, const uint8_t* src)
 {
 	memcpy(dst, src, s->src_cx * s->src_cy * 3 / 2);
-	//memcpy(dst, src, s->src_cx * s->src_cy * 3);
 }
 
-video_queue_t* video_queue_create(uint32_t cx, uint32_t cy, uint64_t interval)
+std::shared_ptr<video_queue_t> video_queue_create(uint32_t cx, uint32_t cy, uint64_t interval)
 {
-	struct video_queue vq = { 0 };
-	struct video_queue* pvq;
-	DWORD frame_size = cx * cy * 3 / 2;
+	TRY_LOG(info("Start creating video queue"));
+	auto vq = std::make_shared<video_queue>();
+	auto frame_size = cx * cy * 3 / 2;
 	uint32_t offset_frame[3];
-	DWORD size;
-
-	size = sizeof(struct queue_header);
+	auto size = sizeof(queue_header);
 
 	ALIGN_SIZE(size, 32);
 
@@ -68,13 +65,13 @@ video_queue_t* video_queue_create(uint32_t cx, uint32_t cy, uint64_t interval)
 	size += frame_size + FRAME_HEADER_SIZE;
 	ALIGN_SIZE(size, 32);
 
-	struct queue_header header = { 0 };
+	queue_header header = { 0 };
 
 	header.state = SHARED_QUEUE_STATE_STARTING;
 	header.cx = cx;
 	header.cy = cy;
 	header.interval = interval;
-	vq.is_writer = true;
+	vq->is_writer = true;
 
 	for (size_t i = 0; i < 3; i++) {
 		uint32_t off = offset_frame[i];
@@ -82,68 +79,62 @@ video_queue_t* video_queue_create(uint32_t cx, uint32_t cy, uint64_t interval)
 	}
 
 	/* fail if already in use */
-	vq.handle = OpenFileMappingW(FILE_MAP_READ, false, VIDEO_NAME);
-	if (vq.handle) {
-		CloseHandle(vq.handle);
-		return NULL;
+	vq->handle = OpenFileMappingW(FILE_MAP_READ, false, VIDEO_NAME);
+	if (vq->handle) {
+		TRY_LOG(warn("Cannot create video queue: already exist"));
+		CloseHandle(vq->handle);
+		return nullptr;
 	}
 
-	vq.handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
+	vq->handle = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
 		PAGE_READWRITE, 0, size, VIDEO_NAME);
-	if (!vq.handle) {
-		return NULL;
+	if (!vq->handle) {
+		TRY_LOG(error("Cannot create video queue: CreateFileMapping failed"));
+		return nullptr;
 	}
 
-	vq.header = (struct queue_header*)MapViewOfFile(
-		vq.handle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
-	if (!vq.header) {
-		CloseHandle(vq.handle);
-		return NULL;
+	vq->header = (queue_header*)MapViewOfFile(
+		vq->handle, FILE_MAP_ALL_ACCESS, 0, 0, 0);
+	if (!vq->header) {
+		TRY_LOG(error("Cannot create video queue: MapVidevOfFile failed"));
+		CloseHandle(vq->handle);
+		return nullptr;
 	}
-	memcpy(vq.header, &header, sizeof(header));
+	memcpy(vq->header, &header, sizeof(header));
 
 	for (size_t i = 0; i < 3; i++) {
 		uint32_t off = offset_frame[i];
-		vq.ts[i] = (uint64_t*)(((uint8_t*)vq.header) + off);
-		vq.frame[i] = ((uint8_t*)vq.header) + off + FRAME_HEADER_SIZE;
+		vq->ts[i] = (uint64_t*)(((uint8_t*)vq->header) + off);
+		vq->frame[i] = ((uint8_t*)vq->header) + off + FRAME_HEADER_SIZE;
 	}
-	pvq = malloc(sizeof(vq));
-	if (!pvq) {
-		CloseHandle(vq.handle);
-		return NULL;
-	}
-	memcpy(pvq, &vq, sizeof(vq));
-	return pvq;
+	
+	return vq;
 }
 
-video_queue_t* video_queue_open()
+std::shared_ptr<video_queue_t> video_queue_open()
 {
-	struct video_queue vq = { 0 };
+	auto vq = std::make_shared<video_queue>();
 
-	vq.handle = OpenFileMappingW(FILE_MAP_READ, false, VIDEO_NAME);
-	if (!vq.handle) {
-		return NULL;
+	vq->handle = OpenFileMappingW(FILE_MAP_READ, false, VIDEO_NAME);
+	if (!vq->handle) {
+		return nullptr;
 	}
 
-	vq.header = (struct queue_header*)MapViewOfFile(
-		vq.handle, FILE_MAP_READ, 0, 0, 0);
-	if (!vq.header) {
-		CloseHandle(vq.handle);
-		return NULL;
+	vq->header = (queue_header*)MapViewOfFile(
+		vq->handle, FILE_MAP_READ, 0, 0, 0);
+	if (!vq->header) {
+		TRY_LOG(error("Cannot open video queue: MapVidevOfFile failed"));
+		CloseHandle(vq->handle);
+		return nullptr;
 	}
-
-	struct video_queue* pvq = malloc(sizeof(vq));
-	if (!pvq) {
-		CloseHandle(vq.handle);
-		return NULL;
-	}
-	memcpy(pvq, &vq, sizeof(vq));
-	return pvq;
+	TRY_LOG(info("Video queue open"));
+	return vq;
 }
 
-void video_queue_close(video_queue_t* vq)
+void video_queue_close(std::shared_ptr<video_queue_t> vq)
 {
 	if (!vq) {
+		TRY_LOG(warn("Cannot close video queue: already closed"));
 		return;
 	}
 	if (vq->is_writer) {
@@ -152,13 +143,13 @@ void video_queue_close(video_queue_t* vq)
 
 	UnmapViewOfFile(vq->header);
 	CloseHandle(vq->handle);
-	free(vq);
+	TRY_LOG(info("Video queue closed"));
 }
 
-void video_queue_get_info(video_queue_t* vq, uint32_t* cx, uint32_t* cy,
+void video_queue_get_info(std::shared_ptr<video_queue_t> vq, uint32_t* cx, uint32_t* cy,
 	uint64_t* interval)
 {
-	struct queue_header* qh = vq->header;
+	queue_header* qh = vq->header;
 	*cx = qh->cx;
 	*cy = qh->cy;
 	*interval = qh->interval;
@@ -166,10 +157,10 @@ void video_queue_get_info(video_queue_t* vq, uint32_t* cx, uint32_t* cy,
 
 #define get_idx(inc) ((unsigned long)inc % 3)
 
-void video_queue_write(video_queue_t* vq, uint8_t** data, uint32_t* linesize,
+void video_queue_write(std::shared_ptr<video_queue_t> vq, uint8_t** data, uint32_t* linesize,
 	uint64_t timestamp)
 {
-	struct queue_header* qh = vq->header;
+	queue_header* qh = vq->header;
 	long inc = ++qh->write_idx;
 
 	unsigned long idx = get_idx(inc);
@@ -183,7 +174,7 @@ void video_queue_write(video_queue_t* vq, uint8_t** data, uint32_t* linesize,
 	qh->state = SHARED_QUEUE_STATE_READY;
 }
 
-enum queue_state video_queue_state(video_queue_t* vq)
+enum queue_state video_queue_state(std::shared_ptr<video_queue_t> vq)
 {
 	if (!vq) {
 		return SHARED_QUEUE_STATE_INVALID;
@@ -203,18 +194,20 @@ enum queue_state video_queue_state(video_queue_t* vq)
 	return state;
 }
 
-bool video_queue_read(video_queue_t* vq, nv12_scale_t* scale, void* dst,
+bool video_queue_read(std::shared_ptr<video_queue_t> vq, nv12_scale_t* scale, void* dst,
 	uint64_t* ts)
 {
 	struct queue_header* qh = vq->header;
 	long inc = qh->read_idx;
 
 	if (qh->state == SHARED_QUEUE_STATE_STOPPING) {
+		TRY_LOG(warn("Cannot read frame from video queue: SHARED_QUEUE_STATE_STOPPING"));
 		return false;
 	}
 
 	if (inc == vq->last_inc) {
 		if (++vq->dup_counter == 100) {
+			TRY_LOG(warn("Cannot read frame from video queue: duplicate frames"));
 			return false;
 		}
 	}
@@ -227,6 +220,6 @@ bool video_queue_read(video_queue_t* vq, nv12_scale_t* scale, void* dst,
 
 	*ts = *vq->ts[idx];
 
-	nv12_do_scale(scale, dst, vq->frame[idx]);
+	nv12_do_scale(scale, (uint8_t*)dst, vq->frame[idx]);
 	return true;
 }

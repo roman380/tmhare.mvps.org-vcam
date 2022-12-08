@@ -4,16 +4,15 @@
 
 EXTERN_C const GUID CLSID_VirtualCam;
 
-#include "shared-memory-queue.h"
+#include "shared-memory-queue.hpp"
 #include "Placeholder.h"
+#include "Constants.hpp"
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-
-static const std::string name = "ShareTheBoard Virtual Camera";
-static const auto wname = std::wstring(name.begin(), name.end());
+#include <spdlog/sinks/rotating_file_sink.h>
 
 class CVCamStream;
 class CVCam : public CSource
@@ -29,6 +28,8 @@ public:
 
 private:
     CVCam(LPUNKNOWN lpunk, HRESULT* phr);
+
+    std::shared_ptr<spdlog::logger> m_logger;
 };
 
 class CVCamStream : public CSourceStream, public IAMStreamConfig, public IKsPropertySet
@@ -82,7 +83,7 @@ private:
     HBITMAP m_hLogoBmp;
     CCritSec m_cSharedState;
     IReferenceClock* m_pClock;
-    video_queue_t* vq{ nullptr };
+    std::shared_ptr<video_queue_t> vq;
 
     queue_state prev_state{ SHARED_QUEUE_STATE_INVALID };
     uint32_t cx = 1920;

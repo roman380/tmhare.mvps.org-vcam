@@ -92,7 +92,8 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)third\spdlog\include;$(SolutionDir)third\magic_enum\include;$(DirectShowSamplesDir)\baseclasses</AdditionalIncludeDirectories>
     </ClCompile>
     <Midl>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -121,8 +122,8 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Repos\stb\Windows-classic-samples\Samples\Win7Samples\multimedia\directshow\baseclasses;C:\Users\sylwe\Downloads\boost_1_79_0\boost_1_79_0;C:\libs\websocketpp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp14</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)third\spdlog\include;$(SolutionDir)third\magic_enum\include;$(DirectShowSamplesDir)\baseclasses</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Midl>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -150,6 +151,8 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)third\spdlog\include;$(SolutionDir)third\magic_enum\include;$(DirectShowSamplesDir)\baseclasses</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Midl>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -177,6 +180,8 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir)third\spdlog\include;$(SolutionDir)third\magic_enum\include;$(DirectShowSamplesDir)\baseclasses</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Midl>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -204,16 +209,17 @@
     <ClCompile Include="Dll.cpp" />
     <ClCompile Include="Filters.cpp" />
     <ClCompile Include="Placeholder.cpp" />
-    <ClCompile Include="shared-memory-queue.c" />
+    <ClCompile Include="shared-memory-queue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Filters.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Constants.hpp" />
     <ClInclude Include="Filters.h" />
     <ClInclude Include="Message.h" />
     <ClInclude Include="Placeholder.h" />
-    <ClInclude Include="shared-memory-queue.h" />
+    <ClInclude Include="shared-memory-queue.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

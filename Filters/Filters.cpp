@@ -11,15 +11,19 @@
 #include "filters.h"
 #include <uuids.h>
 #include <fstream>
-#include <csignal>
 #include <random>
+#include <iostream>
+#include <windows.h>
+#include <shlobj.h>
+
+//#include <spdlog/spdlog.h>
+//#include <magic_enum.hpp>
 
 const GUID MEDIASUBTYPE_I420 = { 0x30323449,
                 0x0000,
                 0x0010,
                 {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
                  0x71} };
-
 
 template<typename M>
 void sendMessage(M nessage)
@@ -52,7 +56,22 @@ void sendCameraStatus(CameraStatus st, uint32_t id)
     MessageCameraStatus status(id);
     status.payload = st;
     sendMessage<MessageCameraStatus>(status);
+    TRY_LOG(info("send camera status {}", magic_enum::enum_name(st)));
 }
+
+std::string GetMyDocumentsFolderPath()
+{
+    wchar_t folder[1024];
+    HRESULT hr = SHGetFolderPathW(0, CSIDL_MYDOCUMENTS, 0, 0, folder);
+    if (SUCCEEDED(hr))
+    {
+        char str[1024];
+        wcstombs(str, folder, 1023);
+        return str;
+    }
+    else return "";
+}
+
 #define NAME(_x_) ((LPTSTR) NULL)
 
 //////////////////////////////////////////////////////////////////////////
@@ -70,6 +89,23 @@ CVCam::CVCam(LPUNKNOWN lpunk, HRESULT* phr) :
 {
     ASSERT(phr);
     CAutoLock cAutoLock(&m_cStateLock);
+    try
+    {
+        auto max_size = 1048576 * 5; // 5mb
+        auto max_files = 10;
+        auto document_path = GetMyDocumentsFolderPath();
+        if (!document_path.empty())
+        {
+            m_logger = spdlog::rotating_logger_mt(logger_name, document_path + "/STBVirtualCamera/ContentCamera.log", max_size, max_files);
+            spdlog::set_default_logger(m_logger);
+            spdlog::set_level(spdlog::level::info);
+            spdlog::set_pattern("[%H:%M:%S %z] [%n] [%l] [process %P] [thread %t] %v");
+        }
+    }
+    catch (const spdlog::spdlog_ex& ex)
+    {
+        // TODO
+    }
     // Create the one and only output pin
     m_paStreams = (CSourceStream**) new CVCamStream * [1];
     m_paStreams[0] = new CVCamStream(phr, this, wname.c_str());
@@ -105,8 +141,11 @@ CVCamStream::CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName) :
                 sendMessage(MessageKeepAlive(id));
                 std::unique_lock<std::mutex> lk(m);
                 cv.wait_for(lk, std::chrono::milliseconds(5000), [&] { return !is_keep_alive; });
+                TRY_LOG(info("Send keepalive"));
             }
         });
+
+    TRY_LOG(info("CVCamStream::ctor"));
 }
 
 CVCamStream::~CVCamStream()
@@ -114,6 +153,7 @@ CVCamStream::~CVCamStream()
     is_keep_alive = false;
     cv.notify_all();
     keep_alive_thread->join();
+    TRY_LOG(info("CVCamStream::dtor"));
 }
 
 HRESULT CVCamStream::QueryInterface(REFIID riid, void** ppv)
@@ -159,8 +199,9 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
         vq = video_queue_open();
     }
 
-    enum queue_state state = video_queue_state(vq);
+    auto state = video_queue_state(vq);
     if (state != prev_state) {
+        TRY_LOG(info("Change queue state: {}", magic_enum::enum_name(state)));
         if (state == SHARED_QUEUE_STATE_READY) {
             /* The virtualcam output from OBS has started, get
                the actual cx / cy of the data stream */
@@ -317,12 +358,14 @@ HRESULT CVCamStream::OnThreadCreate()
 {
     m_rtLastTime = 0;
     sendCameraStatus(CameraStatus::RUN, id);
+    TRY_LOG(info("Frame processing thread is created"));
     return NOERROR;
 } // OnThreadCreate
 
 HRESULT CVCamStream::OnThreadDestroy(void)
 {
     sendCameraStatus(CameraStatus::STOP, id);
+    TRY_LOG(info("Frame procesing thread is destroyed"));
     return NOERROR;
 }
 
@@ -362,26 +405,20 @@ HRESULT STDMETHODCALLTYPE CVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TYPE**
     *pmt = CreateMediaType(&m_mt);
     DECLARE_PTR(VIDEOINFOHEADER, pvi, (*pmt)->pbFormat);
 
-    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');// MAKEFOURCC('R', 'G', 'B', '4');//MAKEFOURCC('N', 'V', '1', '2');//BI_RGB;
+    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
     pvi->bmiHeader.biBitCount = 12;
     pvi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     pvi->bmiHeader.biWidth = 1920;
     pvi->bmiHeader.biHeight = 1080;
     pvi->bmiHeader.biPlanes = 3;
-    pvi->bmiHeader.biSizeImage = pvi->bmiHeader.biWidth * pvi->bmiHeader.biHeight * 3 / 2;//GetBitmapSize(&pvi->bmiHeader);
-    //pvi->bmiHeader.biClrImportant = 0;
+    pvi->bmiHeader.biSizeImage = pvi->bmiHeader.biWidth * pvi->bmiHeader.biHeight * 3 / 2;
 
     SetRectEmpty(&(pvi->rcSource)); // we want the whole image area rendered.
     SetRectEmpty(&(pvi->rcTarget)); // no particular destination rectangle
 
-    //pvi->rcSource.right = pvi->bmiHeader.biWidth;
-    //pvi->rcSource.bottom = pvi->bmiHeader.biHeight;
-    //pvi->rcTarget = pvi->rcSource;
-
     (*pmt)->majortype = MEDIATYPE_Video;
-    (*pmt)->subtype = MEDIASUBTYPE_I420;//MEDIASUBTYPE_RGB24;//MEDIASUBTYPE_RGB32;//MEDIASUBTYPE_NV12; //MEDIASUBTYPE_H264;
+    (*pmt)->subtype = MEDIASUBTYPE_I420;
     (*pmt)->formattype = FORMAT_VideoInfo;
-    //(*pmt)->bTemporalCompression = FALSE;
     (*pmt)->bFixedSizeSamples = true;
     (*pmt)->lSampleSize = pvi->bmiHeader.biSizeImage;
     (*pmt)->cbFormat = sizeof(VIDEOINFOHEADER);
@@ -394,8 +431,8 @@ HRESULT STDMETHODCALLTYPE CVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TYPE**
     pvscc->InputSize.cy = pvi->bmiHeader.biHeight;
     pvscc->MinCroppingSize = pvscc->InputSize;
     pvscc->MaxCroppingSize = pvscc->InputSize;
-    pvscc->CropGranularityX = 1;//pvscc->InputSize.cx;
-    pvscc->CropGranularityY = 1;//pvscc->InputSize.cy;
+    pvscc->CropGranularityX = 1;
+    pvscc->CropGranularityY = 1;
     pvscc->CropAlignX = 0;
     pvscc->CropAlignY = 0;
 
