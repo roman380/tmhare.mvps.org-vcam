@@ -169,6 +169,7 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
             cx = new_cx;
             cy = new_cy;
             interval = new_interval;
+            sendCameraStatus(CameraStatus::RUN, id);
         }
         else if (state == SHARED_QUEUE_STATE_STOPPING) {
             video_queue_close(vq);
@@ -192,21 +193,18 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
     {
         if (!video_queue_read(vq, &scale, pData, &tmp))
         {
-            if (!prev_frame.empty())
+            if (placeholder.get_placeholder_ptr())
             {
-                pData = prev_frame.data();
-                //memcpy(pData, prev_frame.data(), prev_frame.size());
+                memcpy(pData, placeholder.get_placeholder_ptr(), lDataLen);
+            }
+            else
+            {
+                for (int i = 0; i < lDataLen; ++i)
+                    pData[i] = rand();
             }
             video_queue_close(vq);
             vq = nullptr;
-        }
-        else
-        {
-            if (prev_frame.empty())
-            {
-                prev_frame.reserve(lDataLen);
-            }
-            memcpy(prev_frame.data(), pData, prev_frame.size());
+            prev_state = SHARED_QUEUE_STATE_INVALID;
         }
     }
     else
@@ -220,8 +218,6 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
             for (int i = 0; i < lDataLen; ++i)
                 pData[i] = rand();
         }
-        video_queue_close(vq);
-        vq = nullptr;
     }
 
     return NOERROR;
@@ -261,7 +257,7 @@ HRESULT CVCamStream::GetMediaType(int iPosition, CMediaType* pmt)
     DECLARE_PTR(VIDEOINFOHEADER, pvi, pmt->AllocFormatBuffer(sizeof(VIDEOINFOHEADER)));
     ZeroMemory(pvi, sizeof(VIDEOINFOHEADER));
 
-    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');//MAKEFOURCC('R', 'G', 'B', '4');//MAKEFOURCC('N', 'V', '1', '2');//BI_RGB;
+    pvi->bmiHeader.biCompression = MAKEFOURCC('I', '4', '2', '0');
     pvi->bmiHeader.biBitCount = 12;
     pvi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     pvi->bmiHeader.biWidth = 1920;

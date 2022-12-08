@@ -214,7 +214,7 @@ bool video_queue_read(video_queue_t* vq, nv12_scale_t* scale, void* dst,
 	}
 
 	if (inc == vq->last_inc) {
-		if (++vq->dup_counter == 10) {
+		if (++vq->dup_counter == 100) {
 			return false;
 		}
 	}

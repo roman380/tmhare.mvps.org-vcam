@@ -82,9 +82,9 @@ private:
     HBITMAP m_hLogoBmp;
     CCritSec m_cSharedState;
     IReferenceClock* m_pClock;
-    video_queue_t* vq = nullptr;
+    video_queue_t* vq{ nullptr };
 
-    enum queue_state prev_state = SHARED_QUEUE_STATE_INVALID;
+    queue_state prev_state{ SHARED_QUEUE_STATE_INVALID };
     uint32_t cx = 1920;
     uint32_t cy = 1080;
     uint64_t interval = 333333ULL;
