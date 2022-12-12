@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-class Placeholder
+class placeholder
 {
 public:
 	inline uint8_t* get_placeholder_ptr() { return !data.empty() ? data.data() : nullptr; }

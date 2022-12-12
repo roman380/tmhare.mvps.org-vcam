@@ -1,4 +1,4 @@
-#include "Placeholder.h"
+#include "placeholder.hpp"
 #include <iterator>
 #include <fstream>
 #include <windows.h>
@@ -7,7 +7,7 @@
 
 extern HINSTANCE dll_inst;
 
-void Placeholder::initialize_placeholder()
+void placeholder::initialize_placeholder()
 {
 	if (!data.empty())
 		return;
@@ -15,7 +15,7 @@ void Placeholder::initialize_placeholder()
 	load_placeholder();
 }
 
-void Placeholder::load_placeholder()
+void placeholder::load_placeholder()
 {
 	wchar_t file[MAX_PATH];
 	if (!GetModuleFileNameW(dll_inst, file, MAX_PATH)) {
@@ -40,5 +40,4 @@ void Placeholder::load_placeholder()
 		std::istream_iterator<uint8_t> start(is), end;
 		data = std::vector<uint8_t>(start, end);
 	}
-	return;
 }

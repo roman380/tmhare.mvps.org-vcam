@@ -208,8 +208,8 @@
   <ItemGroup>
     <ClCompile Include="Dll.cpp" />
     <ClCompile Include="Filters.cpp" />
-    <ClCompile Include="Placeholder.cpp" />
-    <ClCompile Include="shared-memory-queue.cpp" />
+    <ClCompile Include="placeholder.cpp" />
+    <ClCompile Include="shared_memory_queue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Filters.def" />
@@ -217,9 +217,9 @@
   <ItemGroup>
     <ClInclude Include="Constants.hpp" />
     <ClInclude Include="Filters.h" />
-    <ClInclude Include="Message.h" />
-    <ClInclude Include="Placeholder.h" />
-    <ClInclude Include="shared-memory-queue.hpp" />
+    <ClInclude Include="message.hpp" />
+    <ClInclude Include="placeholder.hpp" />
+    <ClInclude Include="shared_memory_queue.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

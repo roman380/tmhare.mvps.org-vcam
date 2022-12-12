@@ -4,8 +4,8 @@
 
 EXTERN_C const GUID CLSID_VirtualCam;
 
-#include "shared-memory-queue.hpp"
-#include "Placeholder.h"
+#include "shared_memory_queue.hpp"
+#include "placeholder.hpp"
 #include "Constants.hpp"
 #include <memory>
 #include <mutex>
@@ -83,14 +83,17 @@ private:
     HBITMAP m_hLogoBmp;
     CCritSec m_cSharedState;
     IReferenceClock* m_pClock;
-    std::shared_ptr<video_queue_t> vq;
+    std::shared_ptr<shared_queue::video_queue_t> vq;
+    shared_queue::video_queue_reader m_vq_reader;
 
-    queue_state prev_state{ SHARED_QUEUE_STATE_INVALID };
+    shared_queue::queue_state prev_state{ shared_queue::queue_state::invalid };
     uint32_t cx = 1920;
     uint32_t cy = 1080;
     uint64_t interval = 333333ULL;
-    std::vector<uint8_t> prev_frame;
-    Placeholder placeholder;
+
+    shared_queue::queue_info m_info = {1920, 1080, 333333ULL };
+
+    placeholder m_placeholder;
     uint32_t id;
     std::unique_ptr<std::thread> keep_alive_thread;
     bool is_keep_alive{ true };
