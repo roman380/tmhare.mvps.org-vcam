@@ -53,20 +53,7 @@ void sendCameraStatus(camera_status_enum st, uint32_t id)
     message_camera_status status(id);
     status.payload = st;
     sendMessage<message_camera_status>(status);
-    TRY_LOG(info("send camera status {}", magic_enum::enum_name(st)));
-}
-
-std::string GetMyDocumentsFolderPath()
-{
-    wchar_t folder[1024];
-    HRESULT hr = SHGetFolderPathW(0, CSIDL_MYDOCUMENTS, 0, 0, folder);
-    if (SUCCEEDED(hr))
-    {
-        char str[1024];
-        wcstombs(str, folder, 1023);
-        return str;
-    }
-    else return "";
+    //TRY_LOG(info("send camera status {}", magic_enum::enum_name(st)));
 }
 
 #define NAME(_x_) ((LPTSTR) NULL)
@@ -86,26 +73,9 @@ CVCam::CVCam(LPUNKNOWN lpunk, HRESULT* phr) :
 {
     ASSERT(phr);
     CAutoLock cAutoLock(&m_cStateLock);
-    try
-    {
-        auto max_size = 1048576 * 5; // 5mb
-        auto max_files = 10;
-        auto document_path = GetMyDocumentsFolderPath();
-        if (!document_path.empty())
-        {
-            m_logger = spdlog::rotating_logger_mt(logger_name, document_path + "/STBVirtualCamera/ContentCamera.log", max_size, max_files);
-            spdlog::set_default_logger(m_logger);
-            spdlog::set_level(spdlog::level::info);
-            spdlog::set_pattern("[%H:%M:%S %z] [%n] [%l] [process %P] [thread %t] %v");
-        }
-    }
-    catch (const spdlog::spdlog_ex& ex)
-    {
-        // TODO
-    }
     // Create the one and only output pin
     m_paStreams = (CSourceStream**) new CVCamStream * [1];
-    m_paStreams[0] = new CVCamStream(phr, this, wname.c_str());
+    m_paStreams[0] = new CVCamStream(phr, this, wname.c_str(), std::make_shared<content_camera::logger>());
 }
 
 HRESULT CVCam::QueryInterface(REFIID riid, void** ppv)
@@ -121,12 +91,13 @@ HRESULT CVCam::QueryInterface(REFIID riid, void** ppv)
 // CVCamStream is the one and only output pin of CVCam which handles 
 // all the stuff.
 //////////////////////////////////////////////////////////////////////////
-CVCamStream::CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName) :
-    CSourceStream(NAME(name.c_str()), phr, pParent, pPinName), m_pParent(pParent)
+CVCamStream::CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName, std::shared_ptr<content_camera::logger> logger):
+    CSourceStream(NAME(name.c_str()), phr, pParent, pPinName), m_pParent(pParent), m_logger{ logger }
 {
     // Set the default media type as 320x240x24@15
     GetMediaType(4, &m_mt);
     m_placeholder.initialize_placeholder();
+    m_vq_reader = std::make_unique<shared_queue::video_queue_reader>(m_logger);
     std::random_device rd;
     std::mt19937 mt(rd());
     auto dist = std::uniform_int_distribution<>();
@@ -138,11 +109,10 @@ CVCamStream::CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName) :
                 sendMessage(message_keep_alive(id));
                 std::unique_lock<std::mutex> lk(m);
                 cv.wait_for(lk, std::chrono::milliseconds(5000), [&] { return !is_keep_alive; });
-                TRY_LOG(info("Send keepalive"));
+                m_logger->info("Send keepalive");
             }
         });
-
-    TRY_LOG(info("CVCamStream::ctor"));
+    m_logger->info("CVCamStream::ctor");
 }
 
 CVCamStream::~CVCamStream()
@@ -150,7 +120,7 @@ CVCamStream::~CVCamStream()
     is_keep_alive = false;
     cv.notify_all();
     keep_alive_thread->join();
-    TRY_LOG(info("CVCamStream::dtor"));
+    m_logger->info("CVCamStream::dtor");
 }
 
 HRESULT CVCamStream::QueryInterface(REFIID riid, void** ppv)
@@ -187,23 +157,23 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
     uint32_t new_cy = cy;
     uint64_t new_interval = interval;
 
-    if (!m_vq_reader.is_open()) 
+    if (!m_vq_reader->is_open()) 
     {
-        m_vq_reader.open();
+        m_vq_reader->open();
     }
 
-    auto state = m_vq_reader.get_state();
+    auto state = m_vq_reader->get_state();
     if (state != prev_state) 
     {
-        TRY_LOG(info("Change queue state: {}", magic_enum::enum_name(state)));
+        m_logger->info("Change queue state: {}", magic_enum::enum_name(state));
         if (state == shared_queue::queue_state::ready) 
         {
-            m_info = m_vq_reader.get_info();
+            m_info = m_vq_reader->get_info();
             sendCameraStatus(camera_status_enum::run, id);
         }
         else if (state == shared_queue::queue_state::stopping) 
         {
-            m_vq_reader.close();
+            m_vq_reader->close();
         }
 
         prev_state = state;
@@ -221,7 +191,7 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
 
     if (state == shared_queue::queue_state::ready)
     {
-        if (!m_vq_reader.read( &scale, pData, &tmp))
+        if (!m_vq_reader->read( &scale, pData, &tmp))
         {
             auto ptr = m_placeholder.get_placeholder_ptr();
             if (ptr)
@@ -233,9 +203,7 @@ HRESULT CVCamStream::FillBuffer(IMediaSample* pms)
                 for (int i = 0; i < lDataLen; ++i)
                     pData[i] = rand();
             }
-            /*shared_queue::video_queue_close(vq);
-            vq = nullptr;*/
-            m_vq_reader.close();
+            m_vq_reader->close();
             prev_state = shared_queue::queue_state::invalid;
         }
     }
@@ -350,14 +318,14 @@ HRESULT CVCamStream::OnThreadCreate()
 {
     m_rtLastTime = 0;
     sendCameraStatus(camera_status_enum::run, id);
-    TRY_LOG(info("Frame processing thread is created"));
+    m_logger->info("Frame processing thread is created");
     return NOERROR;
 } // OnThreadCreate
 
 HRESULT CVCamStream::OnThreadDestroy(void)
 {
     sendCameraStatus(camera_status_enum::stop, id);
-    TRY_LOG(info("Frame procesing thread is destroyed"));
+    m_logger->info("Frame procesing thread is destroyed");
     return NOERROR;
 }
 

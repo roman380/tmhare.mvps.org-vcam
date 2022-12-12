@@ -6,13 +6,13 @@ EXTERN_C const GUID CLSID_VirtualCam;
 
 #include "shared_memory_queue.hpp"
 #include "placeholder.hpp"
-#include "Constants.hpp"
+#include "constants.hpp"
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-#include <spdlog/sinks/rotating_file_sink.h>
+#include "logger.hpp"
 
 class CVCamStream;
 class CVCam : public CSource
@@ -66,7 +66,7 @@ public:
     //////////////////////////////////////////////////////////////////////////
     //  CSourceStream
     //////////////////////////////////////////////////////////////////////////
-    CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName);
+    CVCamStream(HRESULT* phr, CVCam* pParent, LPCWSTR pPinName, std::shared_ptr<content_camera::logger> logger);
     ~CVCamStream();
 
     HRESULT FillBuffer(IMediaSample* pms);
@@ -84,7 +84,7 @@ private:
     CCritSec m_cSharedState;
     IReferenceClock* m_pClock;
     std::shared_ptr<shared_queue::video_queue_t> vq;
-    shared_queue::video_queue_reader m_vq_reader;
+    std::unique_ptr<shared_queue::video_queue_reader> m_vq_reader;
 
     shared_queue::queue_state prev_state{ shared_queue::queue_state::invalid };
     uint32_t cx = 1920;
@@ -99,6 +99,8 @@ private:
     bool is_keep_alive{ true };
     std::mutex m;
     std::condition_variable cv;
+
+    std::shared_ptr<content_camera::logger> m_logger;
 };
 
 

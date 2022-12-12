@@ -1,6 +1,5 @@
 #include <windows.h>
 #include "shared_memory_queue.hpp"
-#include "Constants.hpp"
 
 #define VIDEO_NAME L"STBVirtualCamVideo"
 
@@ -41,10 +40,13 @@ void copy_from_queue(shared_queue::i420_scale_t* s, uint8_t* dst, const uint8_t*
 
 #define get_idx(inc) ((unsigned long)inc % 3)
 
+shared_queue::video_circular_queue::video_circular_queue(std::shared_ptr<content_camera::logger> logger):
+	m_logger{ logger } {}
+
 bool shared_queue::video_circular_queue::close()
 {
 	if (!m_queue) {
-		TRY_LOG(warn("Cannot close video queue: already closed"));
+		m_logger->warn("Cannot close video queue: already closed");
 		return false;
 	}
 	if (m_queue->is_writer) {
@@ -54,7 +56,7 @@ bool shared_queue::video_circular_queue::close()
 	UnmapViewOfFile(m_queue->header);
 	CloseHandle(m_queue->handle);
 	m_queue = nullptr;
-	TRY_LOG(info("Video queue closed"));
+	m_logger->info("Video queue closed");
 	return true;
 }
 
@@ -93,6 +95,9 @@ shared_queue::video_circular_queue::~video_circular_queue()
 	close();
 }
 
+shared_queue::video_queue_reader::video_queue_reader(std::shared_ptr<content_camera::logger> logger):
+	shared_queue::video_circular_queue{ logger } {}
+
 bool shared_queue::video_queue_reader::open()
 {
 	auto vq = std::make_shared<video_queue>();
@@ -105,12 +110,12 @@ bool shared_queue::video_queue_reader::open()
 	vq->header = (queue_header*)MapViewOfFile(
 		vq->handle, FILE_MAP_READ, 0, 0, 0);
 	if (!vq->header) {
-		TRY_LOG(error("Cannot open video queue: MapVidevOfFile failed"));
+		m_logger->error("Cannot open video queue: MapVidevOfFile failed");
 		CloseHandle(vq->handle);
 		return false;
 	}
 	m_queue = vq;
-	TRY_LOG(info("Video queue open"));
+	m_logger->info("Video queue open");
 	return true;
 }
 
@@ -125,13 +130,13 @@ bool shared_queue::video_queue_reader::read(i420_scale_t* scale, uint8_t* dst, u
 	long inc = qh->read_idx;
 
 	if (qh->state == queue_state::stopping || qh->state == queue_state::invalid) {
-		TRY_LOG(warn("Cannot read frame from video queue: wrong state"));
+		m_logger->warn("Cannot read frame from video queue: wrong state");
 		return false;
 	}
 
 	if (inc == m_queue->last_inc) {
 		if (++m_queue->dup_counter == 100) {
-			TRY_LOG(warn("Cannot read frame from video queue: duplicate frames"));
+			m_logger->warn("Cannot read frame from video queue: duplicate frames");
 			return false;
 		}
 	}

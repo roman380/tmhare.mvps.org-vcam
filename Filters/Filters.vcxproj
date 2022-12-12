@@ -208,6 +208,7 @@
   <ItemGroup>
     <ClCompile Include="Dll.cpp" />
     <ClCompile Include="Filters.cpp" />
+    <ClCompile Include="logger.cpp" />
     <ClCompile Include="placeholder.cpp" />
     <ClCompile Include="shared_memory_queue.cpp" />
   </ItemGroup>
@@ -215,8 +216,9 @@
     <CustomBuild Include="Filters.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Constants.hpp" />
+    <ClInclude Include="constants.hpp" />
     <ClInclude Include="Filters.h" />
+    <ClInclude Include="logger.hpp" />
     <ClInclude Include="message.hpp" />
     <ClInclude Include="placeholder.hpp" />
     <ClInclude Include="shared_memory_queue.hpp" />

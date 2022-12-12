@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <memory>
 
+#include "logger.hpp"
+
 namespace shared_queue
 {
 	struct video_queue;
@@ -47,11 +49,13 @@ namespace shared_queue
 	class video_circular_queue
 	{
 	public:
+		video_circular_queue(std::shared_ptr<content_camera::logger> logger);
 		bool close();
 		queue_info get_info();
 		queue_state get_state();
 	protected:
 		std::shared_ptr<video_queue_t> m_queue;
+		std::shared_ptr<content_camera::logger> m_logger;
 	protected:
 		video_circular_queue() = default;
 		~video_circular_queue();
@@ -61,6 +65,7 @@ namespace shared_queue
 	class video_queue_reader : public video_circular_queue
 	{
 	public:
+		video_queue_reader(std::shared_ptr<content_camera::logger> logger);
 		bool open();
 		bool is_open();
 		bool read(i420_scale_t* scale, uint8_t* dst, uint64_t* ts);
