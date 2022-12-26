@@ -54,7 +54,7 @@ namespace shared_queue
 		queue_info get_info();
 		queue_state get_state();
 	protected:
-		std::shared_ptr<video_queue_t> m_queue;
+		std::unique_ptr<video_queue_t> m_queue;
 		std::shared_ptr<content_camera::logger> m_logger;
 	protected:
 		video_circular_queue() = default;

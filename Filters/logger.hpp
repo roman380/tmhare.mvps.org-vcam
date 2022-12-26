@@ -20,6 +20,7 @@ namespace content_camera
     }
 	public:
 		logger();
+		~logger();
 
 		template<typename... Args>
 		void trace(const std::string& msg, Args... args)

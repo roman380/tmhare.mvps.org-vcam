@@ -100,7 +100,7 @@ shared_queue::video_queue_reader::video_queue_reader(std::shared_ptr<content_cam
 
 bool shared_queue::video_queue_reader::open()
 {
-	auto vq = std::make_shared<video_queue>();
+	auto vq = std::make_unique<video_queue>();
 
 	vq->handle = OpenFileMappingW(FILE_MAP_READ, false, VIDEO_NAME);
 	if (!vq->handle) {
@@ -114,7 +114,7 @@ bool shared_queue::video_queue_reader::open()
 		CloseHandle(vq->handle);
 		return false;
 	}
-	m_queue = vq;
+	m_queue = std::move(vq);
 	m_logger->info("Video queue open");
 	return true;
 }

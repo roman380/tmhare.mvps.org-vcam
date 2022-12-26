@@ -40,3 +40,8 @@ content_camera::logger::logger()
         // TODO
     }
 }
+
+content_camera::logger::~logger()
+{
+    spdlog::shutdown();
+}
